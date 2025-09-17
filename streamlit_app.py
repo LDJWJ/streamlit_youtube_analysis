@@ -16,6 +16,7 @@ load_dotenv()  # 로컬 개발용 .env (배포 환경에서는 st.secrets 권장
 YOUTUBE_API_KEY = st.secrets.get("YOUTUBE_API_KEY", os.getenv("YOUTUBE_API_KEY", ""))
 DEFAULT_REGION = st.secrets.get("REGION_CODE", os.getenv("REGION_CODE", "KR"))
 DEFAULT_MAX_RESULTS = int(st.secrets.get("MAX_RESULTS", os.getenv("MAX_RESULTS", "30")))
+APP_PASSWORD = st.secrets.get("APP_PASSWORD", os.getenv("APP_PASSWORD", ""))
 
 YOUTUBE_VIDEOS_ENDPOINT = "https://www.googleapis.com/youtube/v3/videos"
 YOUTUBE_CHANNELS_ENDPOINT = "https://www.googleapis.com/youtube/v3/channels"
@@ -47,6 +48,35 @@ def human_readable_number(n: str, unit: str) -> str:
     # 소수 첫째자리까지, .0은 제거
     compact = f"{value:.1f}".rstrip("0").rstrip(".")
     return f"{compact}{units[idx]}{unit}"
+
+
+def check_password() -> bool:
+    """간단 비밀번호 인증. 성공 시 세션에 상태 저장."""
+    if not APP_PASSWORD:
+        # 비밀번호 미설정 시 인증 생략(개발 편의를 위해). 배포에서는 설정 권장.
+        st.warning("APP_PASSWORD가 설정되지 않았습니다. 배포 시 secrets에 설정하세요.")
+        return True
+
+    def password_entered():
+        if st.session_state.get("password") == APP_PASSWORD:
+            st.session_state["password_correct"] = True
+            st.session_state.pop("password", None)
+        else:
+            st.session_state["password_correct"] = False
+
+    if st.session_state.get("password_correct"):
+        return True
+
+    with st.form("login_form"):
+        st.subheader("🔒 로그인")
+        st.text_input("비밀번호", type="password", key="password")
+        submitted = st.form_submit_button("입장")
+        if submitted:
+            password_entered()
+
+    if st.session_state.get("password_correct") is False:
+        st.error("비밀번호가 올바르지 않습니다.")
+    return False
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -142,6 +172,10 @@ def main():
     st.set_page_config(page_title="YouTube 인기 동영상", page_icon="📺", layout="wide")
     st.title("📺 YouTube 인기 동영상")
     st.caption("간단한 YouTube Data API 예제 · 지역/개수 조절 가능 · 5분 캐시")
+
+    # 접근 제어: 비밀번호 확인
+    if not check_password():
+        st.stop()
 
     validate_env()
 
